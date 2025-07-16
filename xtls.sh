@@ -2,47 +2,60 @@
 
 set -e
 
-echo "[1/8] Проверка Docker..."
-if ! command -v docker &> /dev/null; then
-  echo "[+] Устанавливаю Docker..."
+echo "=== [1] Установка Docker (если не установлен) ==="
+if ! command -v docker &>/dev/null; then
   curl -fsSL https://get.docker.com | sh
 fi
 
-echo "[2/8] Включаем IPv6 в Docker..."
+echo "=== [2] Настройка Docker с поддержкой IPv6 ==="
+DAEMON_JSON="/etc/docker/daemon.json"
+IPV6_SUBNET="fd00:feed:cafe::/64"
 
-DOCKER_CONFIG_FILE="/etc/docker/daemon.json"
-
-if [ ! -f "$DOCKER_CONFIG_FILE" ]; then
-  echo "{}" > "$DOCKER_CONFIG_FILE"
+# Создаём конфиг, если не существует
+if [ ! -f "$DAEMON_JSON" ]; then
+  echo "{}" > "$DAEMON_JSON"
 fi
 
-if ! grep -q '"ipv6": true' "$DOCKER_CONFIG_FILE"; then
-  cat <<EOF > "$DOCKER_CONFIG_FILE"
+# Включаем IPv6, если не включено
+if ! grep -q '"ipv6": true' "$DAEMON_JSON"; then
+  cat <<EOF > "$DAEMON_JSON"
 {
   "ipv6": true,
-  "fixed-cidr-v6": "fd00:dead:beef::/64"
+  "fixed-cidr-v6": "$IPV6_SUBNET"
 }
 EOF
-  echo "[+] Перезапускаю Docker с IPv6..."
+  echo "[+] Перезапуск Docker..."
   systemctl restart docker
-else
-  echo "[✓] IPv6 уже включён"
 fi
 
-echo "[3/8] Создание Docker-сети с IPv6..."
-docker network inspect reality-ipv6 >/dev/null 2>&1 || docker network create \
+echo "=== [3] Удаление конфликтующих Docker-сетей ==="
+EXISTING_NETS=$(docker network ls --format '{{.Name}}')
+for NET in $EXISTING_NETS; do
+  if docker network inspect "$NET" | grep -q "$IPV6_SUBNET"; then
+    echo "[!] Удаляю конфликтующую сеть: $NET"
+    docker network rm "$NET" || true
+  fi
+done
+
+echo "=== [4] Создание IPv6-сети Docker (reality-ipv6) ==="
+docker network inspect reality-ipv6 &>/dev/null || docker network create \
   --driver bridge \
   --ipv6 \
-  --subnet "fd00:dead:beef::/64" \
+  --subnet "$IPV6_SUBNET" \
   reality-ipv6
 
-echo "[4/8] Клонирую репозиторий XTLS Reality..."
+echo "=== [5] Удаление предыдущего контейнера и образа ==="
+docker stop xtls-reality &>/dev/null || true
+docker rm xtls-reality &>/dev/null || true
+docker rmi $(docker images myelectronix/xtls-reality -q) &>/dev/null || true
+
+echo "=== [6] Клонирование репозитория (если не существует) ==="
 if [ ! -d "xtls-reality-docker" ]; then
   git clone https://github.com/myelectronix/xtls-reality-docker.git
 fi
 cd xtls-reality-docker
 
-echo "[5/8] Создание docker-compose.override.yml с IPv6-сетью..."
+echo "=== [7] Создание docker-compose.override.yml ==="
 cat <<EOF > docker-compose.override.yml
 services:
   xtls-reality:
@@ -54,15 +67,14 @@ networks:
     external: true
 EOF
 
-echo "[6/8] Запускаю контейнер..."
+echo "=== [8] Запуск Docker Compose ==="
 docker compose up -d
 
-echo "[7/8] Жду 10 секунд на инициализацию..."
-sleep 10
-
-echo "[8/8] Получаю QR-код:"
-docker exec xtls-reality bash get-client-qr.sh
-
+echo "=== [9] Ожидание и вывод QR-кода ==="
+sleep 5
+docker exec xtls-reality bash get-client-qr.sh || echo "Не удалось получить QR"
 echo
-echo "[+] Текстовая конфигурация:"
-docker exec xtls-reality bash get-client-settings.sh
+echo "[+] Конфигурация клиента:"
+docker exec xtls-reality bash get-client-settings.sh || echo "Не удалось получить конфигурацию"
+
+echo "✅ Установка завершена."
