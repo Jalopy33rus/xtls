@@ -9,7 +9,7 @@ fi
 
 echo "=== [2] Настройка Docker с поддержкой IPv6 ==="
 DAEMON_JSON="/etc/docker/daemon.json"
-IPV6_SUBNET="fd00:feed:cafe::/64"
+IPV6_SUBNET="fd00:feed:abcd::/64"
 
 if [ ! -f "$DAEMON_JSON" ]; then
   echo "{}" > "$DAEMON_JSON"
