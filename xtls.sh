@@ -29,6 +29,9 @@ fi
 echo "=== [3] Удаление конфликтующих Docker-сетей ==="
 EXISTING_NETS=$(docker network ls --format '{{.Name}}')
 for NET in $EXISTING_NETS; do
+  if [[ "$NET" == "bridge" || "$NET" == "host" || "$NET" == "none" ]]; then
+    continue
+  fi
   if docker network inspect "$NET" | grep -q "$IPV6_SUBNET"; then
     echo "[!] Удаляю конфликтующую сеть: $NET"
     docker network rm "$NET" || true
