@@ -11,12 +11,10 @@ echo "=== [2] Настройка Docker с поддержкой IPv6 ==="
 DAEMON_JSON="/etc/docker/daemon.json"
 IPV6_SUBNET="fd00:feed:cafe::/64"
 
-# Создаём конфиг, если не существует
 if [ ! -f "$DAEMON_JSON" ]; then
   echo "{}" > "$DAEMON_JSON"
 fi
 
-# Включаем IPv6, если не включено
 if ! grep -q '"ipv6": true' "$DAEMON_JSON"; then
   cat <<EOF > "$DAEMON_JSON"
 {
@@ -49,10 +47,7 @@ docker stop xtls-reality &>/dev/null || true
 docker rm xtls-reality &>/dev/null || true
 docker rmi $(docker images myelectronix/xtls-reality -q) &>/dev/null || true
 
-echo "=== [6] Клонирование репозитория (если не существует) ==="
-if [ ! -d "xtls-reality-docker" ]; then
-  git clone https://github.com/myelectronix/xtls-reality-docker.git
-fi
+echo "=== [6] Переход в директорию с проектом ==="
 cd xtls-reality-docker
 
 echo "=== [7] Создание docker-compose.override.yml ==="
